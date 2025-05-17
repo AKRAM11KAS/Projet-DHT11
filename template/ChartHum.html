@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+{% block i %}
+
+<style>
+  body, html {
+    height: 100%;
+    margin: 0;
+  }
+  .container-hum {
+    max-width: 1000px;
+    height: 100vh;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .btn-group, .date-picker-group {
+    margin-bottom: 25px;
+    text-align: center;
+  }
+  .btn-group button, .date-picker-group button {
+    margin: 0 15px;
+    padding: 10px 20px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 2px solid #28a745;
+    background-color: #28a745;
+    color: white;
+    transition: background-color 0.3s ease;
+  }
+  .btn-group button:hover, .date-picker-group button:hover {
+    background-color: #1e7e34;
+  }
+  input[type="date"] {
+    padding: 8px 12px;
+    font-size: 1.1rem;
+    border-radius: 5px;
+    border: 1px solid #28a745;
+    margin-right: 10px;
+  }
+  #periode-hum {
+    font-weight: 700;
+    font-size: 1.5rem;
+    margin-bottom: 30px;
+    color: #2c3e50;
+    text-align: center;
+    width: 100%;
+  }
+  canvas {
+    width: 100% !important;
+    height: 500px !important;
+    display: block;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    background-color: #fafafa;
+  }
+</style>
+
+<div class="container-hum">
+  <div class="btn-group">
+    <button id="btn-jour-hum">Aujourd'hui</button>
+    <button id="btn-semaine-hum">Cette semaine</button>
+    <button id="btn-mois-hum">Ce mois</button>
+  </div>
+
+  <div class="date-picker-group">
+    <input type="date" id="date-input-hum" />
+    <button id="btn-date-hum">Afficher la date</button>
+  </div>
+
+  <p id="periode-hum">Chargement...</p>
+
+  <canvas id="graphique-hum" height="500"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1/dist/chartjs-adapter-moment.min.js"></script>
+
+<script>
+  let chartHumInstance = null;
+
+  function afficherPeriodeHum(type, dateString=null) {
+    const now = new Date();
+    let texte = '';
+    if(type === 'jour') {
+      texte = `Affichage pour Aujourd'hui (${now.toLocaleDateString()})`;
+    } else if(type === 'semaine') {
+      const debut = new Date();
+      debut.setDate(now.getDate() - 7);
+      texte = `Affichage du ${debut.toLocaleDateString()} au ${now.toLocaleDateString()}`;
+    } else if(type === 'mois') {
+      const debut = new Date();
+      debut.setDate(now.getDate() - 30);
+      texte = `Affichage du ${debut.toLocaleDateString()} au ${now.toLocaleDateString()}`;
+    } else if(type === 'date' && dateString) {
+      const d = new Date(dateString);
+      texte = `Affichage pour le ${d.toLocaleDateString()}`;
+    } else {
+      texte = 'Affichage des dernières mesures';
+    }
+    document.getElementById('periode-hum').innerText = texte;
+  }
+
+function dessinerGraphHum(url) {
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      console.log("Données reçues :", data);  // Pour vérification dans la console
+
+      const labels = data.temps.map(d => new Date(d));
+      const values = data.humidity;
+
+      const canvas = document.getElementById('graphique-hum');
+      canvas.width = canvas.width; // Réinitialise le canvas (très important)
+
+      if (chartHumInstance) {
+        chartHumInstance.destroy();
+      }
+
+      const ctx = canvas.getContext('2d');
+      chartHumInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Humidité (%)',
+            data: values,
+            borderColor: '#28a745',
+            backgroundColor: 'rgba(40,167,69,0.15)',
+            fill: true,
+            pointRadius: 5,
+            borderWidth: 4
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          responsive: true,
+          scales: {
+            xAxes: [{
+              type: 'time',
+              time: {
+                unit: 'hour',
+                tooltipFormat: 'DD/MM/YYYY HH:mm',
+                displayFormats: { hour: 'HH:mm' }
+              },
+              ticks: {
+                autoSkip: true,
+                maxTicksLimit: 20
+              },
+              gridLines: {
+                color: '#eee'
+              }
+            }],
+            yAxes: [{
+              ticks: {
+                beginAtZero: true,
+                callback: val => val + '%'
+              },
+              gridLines: {
+                color: '#eee'
+              }
+            }]
+          }
+        }
+      });
+    });
+}
+
+
+  document.getElementById('btn-jour-hum').onclick = () => {
+    afficherPeriodeHum('jour');
+    dessinerGraphHum('/chart-data-jour/');
+  };
+  document.getElementById('btn-semaine-hum').onclick = () => {
+    afficherPeriodeHum('semaine');
+    dessinerGraphHum('/chart-data-semaine/');
+  };
+  document.getElementById('btn-mois-hum').onclick = () => {
+    afficherPeriodeHum('mois');
+    dessinerGraphHum('/chart-data-mois/');
+  };
+  document.getElementById('btn-date-hum').onclick = () => {
+    const dateVal = document.getElementById('date-input-hum').value;
+    if(!dateVal) {
+      alert('Veuillez sélectionner une date.');
+      return;
+    }
+    afficherPeriodeHum('date', dateVal);
+    dessinerGraphHum(`/chart-data-date-hum/?date=${dateVal}`);
+  };
+
+  // Chargement initial
+  afficherPeriodeHum();
+  dessinerGraphHum('/chart-data/');
+</script>
+
+{% endblock %}

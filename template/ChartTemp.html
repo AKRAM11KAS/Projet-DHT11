@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% block i %}
+
+<style>
+  body, html {
+    height: 100%;
+    margin: 0;
+  }
+  .container-temp {
+    max-width: 1000px;
+    height: 100vh;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  .btn-group, .date-picker-group {
+    margin-bottom: 25px;
+    text-align: center;
+  }
+  .btn-group button, .date-picker-group button {
+    margin: 0 15px;
+    padding: 10px 20px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 2px solid #007bff;
+    background-color: #007bff;
+    color: white;
+    transition: background-color 0.3s ease;
+  }
+  .btn-group button:hover, .date-picker-group button:hover {
+    background-color: #0056b3;
+  }
+  input[type="date"] {
+    padding: 8px 12px;
+    font-size: 1.1rem;
+    border-radius: 5px;
+    border: 1px solid #007bff;
+    margin-right: 10px;
+  }
+  #periode-temp {
+    font-weight: 700;
+    font-size: 1.5rem;
+    margin-bottom: 30px;
+    color: #2c3e50;
+    text-align: center;
+    width: 100%;
+  }
+  canvas {
+    width: 100% !important;
+    height: 500px !important;
+    display: block;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    background-color: #f0f8ff;
+  }
+</style>
+
+<div class="container-temp">
+  <div class="btn-group">
+    <button id="btn-jour-temp">Aujourd'hui</button>
+    <button id="btn-semaine-temp">Cette semaine</button>
+    <button id="btn-mois-temp">Ce mois</button>
+  </div>
+
+  <div class="date-picker-group">
+    <input type="date" id="date-input-temp" />
+    <button id="btn-date-temp">Afficher la date</button>
+  </div>
+
+  <p id="periode-temp">Chargement...</p>
+
+  <canvas id="graphique-temp" height="500"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@0.1.1/dist/chartjs-adapter-moment.min.js"></script>
+
+<script>
+  let chartTempInstance = null;
+
+  function afficherPeriodeTemp(type, dateString=null) {
+    const now = new Date();
+    let texte = '';
+    if(type === 'jour') {
+      texte = `Affichage pour Aujourd'hui (${now.toLocaleDateString()})`;
+    } else if(type === 'semaine') {
+      const debut = new Date();
+      debut.setDate(now.getDate() - 7);
+      texte = `Affichage du ${debut.toLocaleDateString()} au ${now.toLocaleDateString()}`;
+    } else if(type === 'mois') {
+      const debut = new Date();
+      debut.setDate(now.getDate() - 30);
+      texte = `Affichage du ${debut.toLocaleDateString()} au ${now.toLocaleDateString()}`;
+    } else if(type === 'date' && dateString) {
+      const d = new Date(dateString);
+      texte = `Affichage pour le ${d.toLocaleDateString()}`;
+    } else {
+      texte = 'Affichage des dernières mesures';
+    }
+    document.getElementById('periode-temp').innerText = texte;
+  }
+
+  function dessinerGraphTemp(url) {
+    fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        console.log("Données température reçues :", data);
+
+        const labels = data.temps.map(d => new Date(d));
+        const values = data.temperature;
+
+        const canvas = document.getElementById('graphique-temp');
+        canvas.width = canvas.width;  // force redraw
+
+        if (chartTempInstance) {
+          chartTempInstance.destroy();
+        }
+
+        const ctx = canvas.getContext('2d');
+        chartTempInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Température (°C)',
+              data: values,
+              borderColor: '#007bff',
+              backgroundColor: 'rgba(0,123,255,0.15)',
+              fill: true,
+              pointRadius: 5,
+              borderWidth: 4
+            }]
+          },
+          options: {
+            maintainAspectRatio: false,
+            responsive: true,
+            scales: {
+              xAxes: [{
+                type: 'time',
+                time: {
+                  unit: 'hour',
+                  tooltipFormat: 'DD/MM/YYYY HH:mm',
+                  displayFormats: { hour: 'HH:mm' }
+                },
+                ticks: {
+                  autoSkip: true,
+                  maxTicksLimit: 20
+                },
+                gridLines: {
+                  color: '#eee'
+                }
+              }],
+              yAxes: [{
+                ticks: {
+                  beginAtZero: true,
+                  callback: val => val + '°'
+                },
+                gridLines: {
+                  color: '#eee'
+                }
+              }]
+            }
+          }
+        });
+      });
+  }
+
+  document.getElementById('btn-jour-temp').onclick = () => {
+    afficherPeriodeTemp('jour');
+    dessinerGraphTemp('/chart-data-jour/');
+  };
+  document.getElementById('btn-semaine-temp').onclick = () => {
+    afficherPeriodeTemp('semaine');
+    dessinerGraphTemp('/chart-data-semaine/');
+  };
+  document.getElementById('btn-mois-temp').onclick = () => {
+    afficherPeriodeTemp('mois');
+    dessinerGraphTemp('/chart-data-mois/');
+  };
+  document.getElementById('btn-date-temp').onclick = () => {
+    const dateVal = document.getElementById('date-input-temp').value;
+    if (!dateVal) {
+      alert('Veuillez sélectionner une date.');
+      return;
+    }
+    afficherPeriodeTemp('date', dateVal);
+    dessinerGraphTemp(`/chart-data-date-temp/?date=${dateVal}`);
+  };
+
+  // Initial load
+  afficherPeriodeTemp();
+  dessinerGraphTemp('/chart-data/');
+</script>
+
+{% endblock %}
